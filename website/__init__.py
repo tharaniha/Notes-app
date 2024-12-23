@@ -1,7 +1,7 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
-from os import path
 from flask_login import LoginManager
+import os
 
 db = SQLAlchemy()
 DB_NAME = "database.db"
@@ -9,7 +9,14 @@ DB_NAME = "database.db"
 def create_app():
     app = Flask(__name__)
     app.config['SECRET_KEY'] = 'jufrjowf'
-    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_NAME}'
+
+    # Configure database path for compatibility with Vercel
+    if os.getenv("VERCEL_ENV"):  # Check if running in Vercel
+        app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:////tmp/{DB_NAME}"  # Use Vercel's writable directory
+    else:
+        app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{DB_NAME}"  # Local path for development
+
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     db.init_app(app)
 
     from .views import views
@@ -19,11 +26,11 @@ def create_app():
     app.register_blueprint(auth, url_prefix='/')
 
     from .models import User, Note
-    
     create_database(app)
 
+    # Set up Flask-Login
     login_manager = LoginManager()
-    login_manager.login_view = 'auth.login'  # This ensures Flask-Login redirects unauthorized users to '/login'
+    login_manager.login_view = 'auth.login'
     login_manager.init_app(app)
 
     @login_manager.user_loader
@@ -33,7 +40,9 @@ def create_app():
     return app
 
 def create_database(app):
-    if not path.exists('website/' + DB_NAME):
+    db_path = os.path.join('/tmp' if os.getenv("VERCEL_ENV") else 'website', DB_NAME)
+
+    if not os.path.exists(db_path):
         with app.app_context():  
             db.create_all()
         print('Created Database!')
